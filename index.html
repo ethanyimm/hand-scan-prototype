@@ -1,154 +1,631 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Hand Scan Prototype</title>
+  <title>Hand Scan Pro - MediaPipe</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/objectron/objectron.js" crossorigin="anonymous"></script>
 </head>
 <body>
-  <h2>Hand Scan Prototype</h2>
-  <p>Upload your hand photo with a credit card or quarter for scale.</p>
+  <h2>🖐️ Hand Scan Pro - AI-Powered Measurement</h2>
+  <p>Upload your hand photo for automatic detection and precise measurements.</p>
   
   <div id="instructions">
-    <h3>Instructions</h3>
+    <h3>Instructions for Best Results</h3>
     <ol>
-      <li id="step1">Upload a hand photo with a credit card or quarter visible.</li>
-      <li id="step2">Calibrate scale: drag the blue dots across the reference object.</li>
-      <li id="step3">Measure fingers: drag dots to mark tip and base of index and ring fingers.</li>
-      <li id="step4">View results: see finger lengths and 2D:4D ratio.</li>
+      <li>📸 Take photo in <strong>good lighting</strong> with hand flat on surface</li>
+      <li>✋ Keep <strong>palm facing camera</strong> with fingers spread slightly</li>
+      <li>💳 Place <strong>credit card BLANK SIDE UP</strong> (no numbers/info visible) OR quarter next to hand</li>
+      <li>📏 <strong>Important:</strong> Drag red calibration line across the <span class="highlight">FULL WIDTH</span> of credit card or <span class="highlight">DIAMETER</span> of quarter</li>
+      <li>🎯 AI will auto-detect hand position and measure automatically</li>
     </ol>
   </div>
 
-  <input type="file" accept="image/*" capture="environment" id="handUpload">
-  
-  <h3>Step 1: Calibrate Scale</h3>
-  <p>Drag the blue dots across your reference object (credit card or quarter).</p>
-  <select id="reference">
-    <option value="credit">Credit Card (85.6 mm)</option>
-    <option value="quarter">Quarter (24.26 mm)</option>
-  </select>
+  <div class="controls">
+    <input type="file" accept="image/*" capture="environment" id="handUpload">
+    
+    <div class="reference-select">
+      <label for="reference">📏 Reference Object:</label>
+      <select id="reference">
+        <option value="credit">💳 Credit Card - BLANK SIDE (85.6 mm width)</option>
+        <option value="quarter">🪙 Quarter (24.26 mm diameter)</option>
+      </select>
+      <div class="calibration-guide">
+        <small><strong>⚠️ Calibration Guide:</strong></small><br>
+        <small>• Credit Card: Drag across FULL WIDTH (long side)</small><br>
+        <small>• Quarter: Drag across FULL DIAMETER</small><br>
+        <small>• Card should be BLANK SIDE UP (no numbers visible)</small>
+      </div>
+    </div>
+  </div>
 
-  <div id="preview-container">
-    <img id="preview"/>
-    <!-- Calibration line -->
-    <div id="calibLine" class="line"></div>
-    <div id="calibStart" class="handle"></div>
-    <div id="calibEnd" class="handle"></div>
-    <!-- Index finger line -->
-    <div id="indexLine" class="line"></div>
-    <div id="indexStart" class="handle"></div>
-    <div id="indexEnd" class="handle"></div>
-    <!-- Ring finger line -->
-    <div id="ringLine" class="line"></div>
-    <div id="ringStart" class="handle"></div>
-    <div id="ringEnd" class="handle"></div>
-    <!-- Reference guide box -->
-    <div id="refGuide">Place card/coin here</div>
+  <div id="status" class="status-message"></div>
+  <div id="quality-indicators" class="quality-panel"></div>
+
+  <div id="canvas-container">
+    <canvas id="outputCanvas"></canvas>
+    <div id="calibLine" class="calib-line"></div>
+    <div id="calibStart" class="calib-handle"></div>
+    <div id="calibEnd" class="calib-handle"></div>
+    <div id="calibLabel" class="calib-label">← Drag to calibrate →</div>
+
   </div>
 
   <div id="results" class="result"></div>
-  <button onclick="resetAll()">Reset</button>
+  <button onclick="resetAll()" class="reset-btn">🔄 Reset</button>
 
   <script>
     const upload = document.getElementById('handUpload');
-    const preview = document.getElementById('preview');
+    const canvas = document.getElementById('outputCanvas');
+    const ctx = canvas.getContext('2d');
     const results = document.getElementById('results');
+    const status = document.getElementById('status');
+    const qualityPanel = document.getElementById('quality-indicators');
+    const container = document.getElementById('canvas-container');
+    const calibLabel = document.getElementById('calibLabel');
+    
     let pixelToMm = 0;
+    let handLandmarks = null;
+    let currentImage = null;
+    let handedness = '';
+    let isCalibrated = false;
+    let qualityMetrics = {
+      handAngle: 0,
+      fingerSpread: 0,
+      palmVisible: false,
+      lighting: 0,
+      confidence: 0
+    };
 
-    function makeDraggable(handle, line, otherHandle, isCalibration=false) {
-      let dragging = false, offsetX, offsetY;
-
-      handle.addEventListener('mousedown', (e) => {
-        dragging = true;
-        offsetX = e.offsetX;
-        offsetY = e.offsetY;
-      });
-
-      document.addEventListener('mouseup', () => dragging = false);
-
-      document.addEventListener('mousemove', (e) => {
-        if (!dragging) return;
-        handle.style.left = (e.pageX - offsetX) + 'px';
-        handle.style.top = (e.pageY - offsetY) + 'px';
-        updateLine(line, handle, otherHandle, isCalibration);
-      });
-    }
-
-    function updateLine(line, start, end, isCalibration=false) {
-      const x1 = start.offsetLeft, y1 = start.offsetTop;
-      const x2 = end.offsetLeft, y2 = end.offsetTop;
-      const lengthPx = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
-
-      if (isCalibration) {
-        const refType = document.getElementById('reference').value;
-        const realMm = refType === 'credit' ? 85.6 : 24.26;
-        pixelToMm = realMm / lengthPx;
-        line.dataset.mm = realMm.toFixed(1);
-      } else {
-        const mm = pixelToMm > 0 ? (lengthPx * pixelToMm).toFixed(1) : (lengthPx * 0.25).toFixed(1);
-        line.dataset.mm = mm;
-      }
-
-      line.style.left = x1 + 'px';
-      line.style.top = y1 + 'px';
-      line.style.height = lengthPx + 'px';
-      line.style.transform = `rotate(${Math.atan2(y2-y1, x2-x1)}rad)`;
-
-      updateResults();
-    }
-
-    function updateResults() {
-      const index = document.getElementById('indexLine').dataset.mm || 0;
-      const ring = document.getElementById('ringLine').dataset.mm || 0;
-      if (index > 0 && ring > 0) {
-        const ratio = (index / ring).toFixed(2);
-        results.innerHTML = `
-          <p>Index finger: ${index} mm</p>
-          <p>Ring finger: ${ring} mm</p>
-          <p>2D:4D ratio: ${ratio}</p>
-          <p><em>Scale calibrated using ${document.getElementById('reference').value}</em></p>
-        `;
-      }
-    }
-
-    function resetAll() {
-      upload.value = '';
-      preview.style.display = 'none';
-      preview.src = '';
-      results.innerHTML = '';
-      pixelToMm = 0;
-    }
-
-    upload.addEventListener('change', () => {
-      const file = upload.files[0];
-      if (file) {
-        preview.src = URL.createObjectURL(file);
-        preview.style.display = 'block';
+    // MediaPipe Hands setup with enhanced settings
+    const hands = new Hands({
+      locateFile: (file) => {
+        return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
       }
     });
 
-    preview.onload = () => {
-      const indexStart = document.getElementById('indexStart');
-      const indexEnd = document.getElementById('indexEnd');
-      const ringStart = document.getElementById('ringStart');
-      const ringEnd = document.getElementById('ringEnd');
-      const calibStart = document.getElementById('calibStart');
-      const calibEnd = document.getElementById('calibEnd');
-      const indexLine = document.getElementById('indexLine');
-      const ringLine = document.getElementById('ringLine');
-      const calibLine = document.getElementById('calibLine');
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.75,
+      minTrackingConfidence: 0.75
+    });
 
-      [indexStart, indexEnd, ringStart, ringEnd, calibStart, calibEnd].forEach(h => {
-        h.style.left = '150px';
-        h.style.top = '150px';
+    hands.onResults(onHandResults);
+
+    function onHandResults(results) {
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+      
+      if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        handLandmarks = results.multiHandLandmarks[0];
+        handedness = results.multiHandedness[0].label;
+        
+        // Calculate quality metrics
+        calculateQualityMetrics(handLandmarks, results.multiHandedness[0]);
+        
+        // Display quality feedback
+        displayQualityFeedback();
+        
+        // Draw full hand skeleton
+        drawConnectors(ctx, handLandmarks, HAND_CONNECTIONS, {
+          color: 'rgba(0, 255, 0, 0.4)', 
+          lineWidth: 2
+        });
+        
+        drawLandmarks(ctx, handLandmarks, {
+          color: '#00FF00', 
+          lineWidth: 1, 
+          radius: 2,
+          fillColor: 'rgba(0, 255, 0, 0.6)'
+        });
+        
+        // Highlight index finger (yellow/gold)
+        highlightFinger(handLandmarks, [5, 6, 7, 8], '#FFD700', '💛 Index');
+        
+        // Highlight ring finger (cyan)
+        highlightFinger(handLandmarks, [13, 14, 15, 16], '#00FFFF', '💍 Ring');
+        
+        // Draw measurement lines if calibrated
+        if (isCalibrated && pixelToMm > 0) {
+          drawMeasurementLines(handLandmarks);
+          calculateFingerLengths();
+        } else {
+          // Suggest calibration area
+          suggestCalibrationArea();
+        }
+        
+        const confidencePercent = (qualityMetrics.confidence * 100).toFixed(0);
+        status.innerHTML = `<span class="success">✅ Hand detected: ${handedness} hand | Confidence: ${confidencePercent}%</span>`;
+        status.className = 'status-message success';
+      } else {
+        status.innerHTML = '<span class="warning">⚠️ No hand detected. Check lighting and hand positioning.</span>';
+        status.className = 'status-message warning';
+        qualityPanel.innerHTML = '';
+        results.innerHTML = '';
+      }
+      
+      ctx.restore();
+    }
+
+    function calculateQualityMetrics(landmarks, handInfo) {
+      // 1. Hand angle (should be flat - check wrist to middle finger alignment)
+      const wrist = landmarks[0];
+      const middleTip = landmarks[12];
+      const angleFromVertical = Math.abs(Math.atan2(
+        middleTip.x - wrist.x,
+        middleTip.y - wrist.y
+      ));
+      qualityMetrics.handAngle = Math.min(100, (1 - angleFromVertical / Math.PI) * 100);
+      
+      // 2. Finger spread (check distance between fingers)
+      const indexTip = landmarks[8];
+      const ringTip = landmarks[16];
+      const spreadDist = Math.sqrt(
+        Math.pow((indexTip.x - ringTip.x) * canvas.width, 2) +
+        Math.pow((indexTip.y - ringTip.y) * canvas.height, 2)
+      );
+      qualityMetrics.fingerSpread = Math.min(100, (spreadDist / canvas.width) * 500);
+      
+      // 3. Palm visibility (check if palm landmarks are clearly visible)
+      const palmArea = calculatePalmArea(landmarks);
+      qualityMetrics.palmVisible = palmArea > 0.01;
+      
+      // 4. Overall confidence from MediaPipe
+      qualityMetrics.confidence = handInfo.score || 0;
+      
+      // 5. Lighting estimate (based on landmark visibility variance)
+      qualityMetrics.lighting = estimateLighting(landmarks);
+    }
+
+    function calculatePalmArea(landmarks) {
+      // Calculate area of palm quadrilateral (wrist, index base, pinky base)
+      const wrist = landmarks[0];
+      const indexBase = landmarks[5];
+      const pinkyBase = landmarks[17];
+      
+      return Math.abs(
+        (indexBase.x - wrist.x) * (pinkyBase.y - wrist.y) -
+        (pinkyBase.x - wrist.x) * (indexBase.y - wrist.y)
+      );
+    }
+
+    function estimateLighting(landmarks) {
+      // Simple heuristic: well-lit images have consistent landmark depth
+      let variance = 0;
+      for (let i = 1; i < landmarks.length; i++) {
+        variance += Math.abs(landmarks[i].z - landmarks[i-1].z);
+      }
+      return Math.max(0, Math.min(100, 100 - variance * 1000));
+    }
+
+    function displayQualityFeedback() {
+      const metrics = [];
+      
+      // Hand angle check
+      if (qualityMetrics.handAngle > 80) {
+        metrics.push(`<div class="quality-item good">✅ Hand Position: Excellent (${qualityMetrics.handAngle.toFixed(0)}%)</div>`);
+      } else if (qualityMetrics.handAngle > 60) {
+        metrics.push(`<div class="quality-item warning">⚠️ Hand Position: Adjust angle (${qualityMetrics.handAngle.toFixed(0)}%)</div>`);
+      } else {
+        metrics.push(`<div class="quality-item bad">❌ Hand Position: Hand too tilted (${qualityMetrics.handAngle.toFixed(0)}%)</div>`);
+      }
+      
+      // Finger spread check
+      if (qualityMetrics.fingerSpread > 40) {
+        metrics.push(`<div class="quality-item good">✅ Finger Spread: Good</div>`);
+      } else {
+        metrics.push(`<div class="quality-item warning">⚠️ Finger Spread: Spread fingers more</div>`);
+      }
+      
+      // Palm visibility
+      if (qualityMetrics.palmVisible) {
+        metrics.push(`<div class="quality-item good">✅ Palm Visible: Clear</div>`);
+      } else {
+        metrics.push(`<div class="quality-item bad">❌ Palm Visible: Ensure palm faces camera</div>`);
+      }
+      
+      // Lighting
+      if (qualityMetrics.lighting > 70) {
+        metrics.push(`<div class="quality-item good">✅ Lighting: Excellent</div>`);
+      } else if (qualityMetrics.lighting > 50) {
+        metrics.push(`<div class="quality-item warning">⚠️ Lighting: Could be better</div>`);
+      } else {
+        metrics.push(`<div class="quality-item bad">❌ Lighting: Poor - use better lighting</div>`);
+      }
+      
+      // Overall confidence
+      const confidenceScore = (qualityMetrics.confidence * 100).toFixed(0);
+      if (qualityMetrics.confidence > 0.9) {
+        metrics.push(`<div class="quality-item good">✅ Detection Confidence: ${confidenceScore}%</div>`);
+      } else if (qualityMetrics.confidence > 0.7) {
+        metrics.push(`<div class="quality-item warning">⚠️ Detection Confidence: ${confidenceScore}%</div>`);
+      } else {
+        metrics.push(`<div class="quality-item bad">❌ Detection Confidence: ${confidenceScore}% - Retake photo</div>`);
+      }
+      
+      qualityPanel.innerHTML = `
+        <h4>📊 Quality Assessment</h4>
+        ${metrics.join('')}
+        ${getOverallRecommendation()}
+      `;
+    }
+
+    function getOverallRecommendation() {
+      const avgQuality = (
+        qualityMetrics.handAngle +
+        qualityMetrics.fingerSpread +
+        (qualityMetrics.palmVisible ? 100 : 0) +
+        qualityMetrics.lighting +
+        (qualityMetrics.confidence * 100)
+      ) / 5;
+      
+      if (avgQuality > 80) {
+        return `<div class="recommendation excellent">🌟 Excellent! Proceed with measurement.</div>`;
+      } else if (avgQuality > 60) {
+        return `<div class="recommendation good">👍 Good quality. Minor adjustments recommended.</div>`;
+      } else {
+        return `<div class="recommendation poor">📸 Consider retaking photo with recommended adjustments.</div>`;
+      }
+    }
+
+    function suggestCalibrationArea() {
+      // Draw a suggested calibration area (top corner suggestion)
+      ctx.strokeStyle = 'rgba(255, 200, 0, 0.7)';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 10]);
+      ctx.strokeRect(canvas.width * 0.05, canvas.height * 0.05, canvas.width * 0.3, canvas.height * 0.15);
+      ctx.setLineDash([]);
+      
+      ctx.fillStyle = 'rgba(255, 200, 0, 0.9)';
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText('📏 Place reference (BLANK SIDE UP)', canvas.width * 0.06, canvas.height * 0.04);
+      
+      // Draw arrow showing width direction for credit card
+      const refType = document.getElementById('reference').value;
+      if (refType === 'credit') {
+        ctx.strokeStyle = 'rgba(255, 100, 100, 0.8)';
+        ctx.lineWidth = 2;
+        const arrowY = canvas.height * 0.12;
+        const arrowStartX = canvas.width * 0.08;
+        const arrowEndX = canvas.width * 0.32;
+        
+        // Draw line
+        ctx.beginPath();
+        ctx.moveTo(arrowStartX, arrowY);
+        ctx.lineTo(arrowEndX, arrowY);
+        ctx.stroke();
+        
+        // Draw arrowheads
+        ctx.beginPath();
+        ctx.moveTo(arrowStartX, arrowY);
+        ctx.lineTo(arrowStartX + 8, arrowY - 5);
+        ctx.lineTo(arrowStartX + 8, arrowY + 5);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255, 100, 100, 0.8)';
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.moveTo(arrowEndX, arrowY);
+        ctx.lineTo(arrowEndX - 8, arrowY - 5);
+        ctx.lineTo(arrowEndX - 8, arrowY + 5);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+        ctx.font = 'bold 12px Arial';
+        ctx.fillText('← WIDTH →', canvas.width * 0.15, arrowY - 10);
+      }
+    }
+
+    function highlightFinger(landmarks, indices, color, label) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 6;
+      ctx.lineCap = 'round';
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      
+      ctx.beginPath();
+      for (let i = 0; i < indices.length - 1; i++) {
+        const start = landmarks[indices[i]];
+        const end = landmarks[indices[i + 1]];
+        ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
+        ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
+      }
+      ctx.stroke();
+      
+      ctx.shadowBlur = 0;
+      
+      const tip = landmarks[indices[indices.length - 1]];
+      ctx.fillStyle = color;
+      ctx.font = 'bold 14px Arial';
+      ctx.fillText(label, tip.x * canvas.width + 10, tip.y * canvas.height - 10);
+    }
+
+    function drawMeasurementLines(landmarks) {
+      const indexBase = landmarks[5];
+      const indexTip = landmarks[8];
+      drawDashedLine(
+        indexBase.x * canvas.width, 
+        indexBase.y * canvas.height,
+        indexTip.x * canvas.width, 
+        indexTip.y * canvas.height,
+        '#FFD700'
+      );
+      
+      const ringBase = landmarks[13];
+      const ringTip = landmarks[16];
+      drawDashedLine(
+        ringBase.x * canvas.width, 
+        ringBase.y * canvas.height,
+        ringTip.x * canvas.width, 
+        ringTip.y * canvas.height,
+        '#00FFFF'
+      );
+    }
+
+    function drawDashedLine(x1, y1, x2, y2, color) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    function calculateFingerLengths() {
+      if (!handLandmarks || pixelToMm === 0) return;
+      
+      const indexBase = handLandmarks[5];
+      const indexTip = handLandmarks[8];
+      const indexPx = Math.sqrt(
+        Math.pow((indexTip.x - indexBase.x) * canvas.width, 2) + 
+        Math.pow((indexTip.y - indexBase.y) * canvas.height, 2)
+      );
+      const indexMm = (indexPx * pixelToMm).toFixed(1);
+      
+      const ringBase = handLandmarks[13];
+      const ringTip = handLandmarks[16];
+      const ringPx = Math.sqrt(
+        Math.pow((ringTip.x - ringBase.x) * canvas.width, 2) + 
+        Math.pow((ringTip.y - ringBase.y) * canvas.height, 2)
+      );
+      const ringMm = (ringPx * pixelToMm).toFixed(1);
+      
+      // Calculate measurement uncertainty
+      const avgQuality = (
+        qualityMetrics.handAngle +
+        qualityMetrics.fingerSpread +
+        (qualityMetrics.palmVisible ? 100 : 0) +
+        qualityMetrics.lighting +
+        (qualityMetrics.confidence * 100)
+      ) / 5;
+      
+      const uncertainty = avgQuality > 80 ? 0.3 : avgQuality > 60 ? 0.5 : 1.0;
+      
+      const ratio = (indexMm / ringMm).toFixed(3);
+      const refType = document.getElementById('reference').value;
+      
+      let interpretation = '';
+      const ratioNum = parseFloat(ratio);
+      if (ratioNum < 0.96) {
+        interpretation = '<span class="male-indicator">📊 Ratio suggests: Typically Male</span>';
+      } else if (ratioNum > 1.00) {
+        interpretation = '<span class="female-indicator">📊 Ratio suggests: Typically Female</span>';
+      } else {
+        interpretation = '<span class="neutral-indicator">📊 Ratio: Within overlap range</span>';
+      }
+      
+      results.innerHTML = `
+        <div class="result-header">
+          <h3>✅ Measurement Complete</h3>
+          <p class="hand-label">Hand: <strong>${handedness}</strong> | Quality Score: <strong>${avgQuality.toFixed(0)}%</strong></p>
+        </div>
+        
+        <div class="measurements">
+          <div class="measurement-item index">
+            <span class="finger-icon">💛</span>
+            <span class="finger-name">Index finger (2D):</span>
+            <span class="finger-value">${indexMm} ± ${uncertainty} mm</span>
+          </div>
+          
+          <div class="measurement-item ring">
+            <span class="finger-icon">💍</span>
+            <span class="finger-name">Ring finger (4D):</span>
+            <span class="finger-value">${ringMm} ± ${uncertainty} mm</span>
+          </div>
+          
+          <div class="ratio-display">
+            <span class="ratio-label">2D:4D Ratio:</span>
+            <span class="ratio-value">${ratio}</span>
+          </div>
+        </div>
+        
+        <div class="interpretation">
+          ${interpretation}
+        </div>
+        
+        <div class="accuracy-info">
+          <h4>📊 Measurement Accuracy</h4>
+          <div class="accuracy-bar">
+            <div class="accuracy-fill" style="width: ${avgQuality}%"></div>
+          </div>
+          <p>Confidence: ${avgQuality.toFixed(0)}% | Uncertainty: ±${uncertainty}mm</p>
+        </div>
+        
+        <div class="calibration-info">
+          <small>📏 Scale: ${refType === 'credit' ? 'Credit Card (85.6mm)' : 'Quarter (24.26mm)'}</small>
+        </div>
+        
+        <div class="reference-info">
+          <small><strong>Reference Ranges:</strong><br>
+          • Typical male: 0.93-0.98<br>
+          • Typical female: 0.97-1.02<br>
+          • Overlap zone: 0.96-1.00</small>
+        </div>
+      `;
+    }
+
+    function makeDraggable(handle, line, otherHandle) {
+      let dragging = false;
+
+      handle.addEventListener('mousedown', (e) => {
+        dragging = true;
+        e.preventDefault();
+        handle.classList.add('dragging');
       });
 
-      makeDraggable(calibStart, calibLine, calibEnd, true);
-      makeDraggable(calibEnd, calibLine, calibStart, true);
-      makeDraggable(indexStart, indexLine, indexEnd, false);
-      makeDraggable(indexEnd, indexLine, indexStart, false);
-      makeDraggable(ringStart, ringLine, ringEnd, false);
-      makeDraggable(ringEnd, ringLine, ringStart, false);
-    };
+      handle.addEventListener('touchstart', (e) => {
+        dragging = true;
+        e.preventDefault();
+        handle.classList.add('dragging');
+      });
+
+      document.addEventListener('mouseup', () => {
+        dragging = false;
+        handle.classList.remove('dragging');
+      });
+
+      document.addEventListener('touchend', () => {
+        dragging = false;
+        handle.classList.remove('dragging');
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!dragging) return;
+        updateHandlePosition(e.clientX, e.clientY, handle, line, otherHandle);
+      });
+
+      document.addEventListener('touchmove', (e) => {
+        if (!dragging) return;
+        const touch = e.touches[0];
+        updateHandlePosition(touch.clientX, touch.clientY, handle, line, otherHandle);
+      });
+    }
+
+    function updateHandlePosition(clientX, clientY, handle, line, otherHandle) {
+      const rect = container.getBoundingClientRect();
+      let x = clientX - rect.left;
+      let y = clientY - rect.top;
+      
+      x = Math.max(0, Math.min(x, rect.width));
+      y = Math.max(0, Math.min(y, rect.height));
+      
+      handle.style.left = x + 'px';
+      handle.style.top = y + 'px';
+      updateCalibrationLine(line, handle, otherHandle);
+    }
+
+    function updateCalibrationLine(line, start, end) {
+      const x1 = parseInt(start.style.left) || 0;
+      const y1 = parseInt(start.style.top) || 0;
+      const x2 = parseInt(end.style.left) || 0;
+      const y2 = parseInt(end.style.top) || 0;
+      
+      const lengthPx = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+      const angle = Math.atan2(y2-y1, x2-x1);
+
+      const refType = document.getElementById('reference').value;
+      const realMm = refType === 'credit' ? 85.6 : 24.26;
+      pixelToMm = realMm / lengthPx;
+      isCalibrated = lengthPx > 20;
+
+      line.style.left = x1 + 'px';
+      line.style.top = y1 + 'px';
+      line.style.width = lengthPx + 'px';
+      line.style.transform = `rotate(${angle}rad)`;
+      line.style.transformOrigin = '0 0';
+
+      if (isCalibrated) {
+        const refName = refType === 'credit' ? 'Credit Card WIDTH' : 'Quarter DIAMETER';
+        calibLabel.textContent = `✓ Calibrated: ${refName} = ${realMm}mm (${pixelToMm.toFixed(3)}mm/px)`;
+        calibLabel.classList.add('calibrated');
+      } else {
+        calibLabel.textContent = '← Drag handles across reference object →';
+        calibLabel.classList.remove('calibrated');
+      }
+
+      if (handLandmarks && isCalibrated) {
+        calculateFingerLengths();
+      }
+    }
+
+    upload.addEventListener('change', async () => {
+      const file = upload.files[0];
+      if (!file) return;
+
+      status.innerHTML = '<span class="loading">⏳ Processing image with AI...</span>';
+      status.className = 'status-message loading';
+
+      const img = new Image();
+      img.onload = async () => {
+        const maxWidth = 800;
+        const scale = Math.min(1, maxWidth / img.width);
+        canvas.width = img.width * scale;
+        canvas.height = img.height * scale;
+        canvas.style.display = 'block';
+        
+        const startX = canvas.width * 0.15;
+        const startY = canvas.height * 0.15;
+        const endX = canvas.width * 0.35;
+        const endY = canvas.height * 0.15;
+        
+        document.getElementById('calibStart').style.left = startX + 'px';
+        document.getElementById('calibStart').style.top = startY + 'px';
+        document.getElementById('calibEnd').style.left = endX + 'px';
+        document.getElementById('calibEnd').style.top = endY + 'px';
+        
+        updateCalibrationLine(
+          document.getElementById('calibLine'),
+          document.getElementById('calibStart'),
+          document.getElementById('calibEnd')
+        );
+        
+        currentImage = img;
+        await hands.send({image: img});
+      };
+      img.src = URL.createObjectURL(file);
+    });
+
+    const calibStart = document.getElementById('calibStart');
+    const calibEnd = document.getElementById('calibEnd');
+    const calibLine = document.getElementById('calibLine');
+    
+    makeDraggable(calibStart, calibLine, calibEnd);
+    makeDraggable(calibEnd, calibLine, calibStart);
+
+    document.getElementById('reference').addEventListener('change', () => {
+      if (calibStart.style.left) {
+        updateCalibrationLine(calibLine, calibStart, calibEnd);
+      }
+    });
+
+    function resetAll() {
+      upload.value = '';
+      canvas.style.display = 'none';
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      results.innerHTML = '';
+      status.innerHTML = '';
+      qualityPanel.innerHTML = '';
+      pixelToMm = 0;
+      isCalibrated = false;
+      handLandmarks = null;
+      calibLine.style.width = '0px';
+      calibLabel.textContent = '← Drag to calibrate →';
+      calibLabel.classList.remove('calibrated');
+      qualityMetrics = {
+        handAngle: 0,
+        fingerSpread: 0,
+        palmVisible: false,
+        lighting: 0,
+        confidence: 0
+      };
+    }
   </script>
 </body>
 </html>

@@ -1,0 +1,821 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  padding: 20px;
+  max-width: 900px;
+  margin: 0 auto;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+
+h2 {
+  color: white;
+  margin-bottom: 10px;
+  font-size: 2em;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+h3 {
+  color: white;
+  margin: 20px 0 10px;
+  font-size: 1.3em;
+}
+
+p {
+  color: rgba(255,255,255,0.9);
+  margin-bottom: 15px;
+  line-height: 1.5;
+}
+
+#instructions {
+  background: rgba(255,255,255,0.95);
+  padding: 20px;
+  border-radius: 12px;
+  margin: 20px 0;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+#instructions h3 {
+  color: #667eea;
+  margin-top: 0;
+  margin-bottom: 15px;
+}
+
+#instructions ol {
+  margin-left: 20px;
+  color: #333;
+}
+
+#instructions li {
+  margin: 10px 0;
+  padding: 8px;
+  background: rgba(102,126,234,0.1);
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+#instructions li:hover {
+  background: rgba(102,126,234,0.2);
+  transform: translateX(5px);
+}
+
+input[type="file"] {
+  background: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.3);
+  cursor: pointer;
+  font-size: 14px;
+  margin: 10px 0;
+  display: inline-block;
+  transition: all 0.3s ease;
+}
+
+input[type="file"]:hover {
+  border-color: #764ba2;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+select {
+  background: white;
+  padding: 10px 15px;
+  border-radius: 8px;
+  border: 2px solid rgba(255,255,255,0.3);
+  font-size: 14px;
+  cursor: pointer;
+  margin: 10px 0;
+  transition: all 0.3s ease;
+}
+
+select:hover {
+  border-color: #764ba2;
+}
+
+#preview-container {
+  position: relative;
+  display: inline-block;
+  margin: 20px 0;
+  background: white;
+  padding: 10px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+#preview {
+  max-width: 500px;
+  display: none;
+  border-radius: 8px;
+}
+
+.line {
+  position: absolute;
+  width: 3px;
+  background: linear-gradient(180deg, #ff6b6b 0%, #ee5a6f 100%);
+  pointer-events: none;
+  transform-origin: top left;
+  box-shadow: 0 2px 8px rgba(255,107,107,0.5);
+  transition: all 0.2s ease;
+}
+
+.handle {
+  width: 16px;
+  height: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: 3px solid white;
+  border-radius: 50%;
+  position: absolute;
+  cursor: grab;
+  transform: translate(-8px, -8px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.handle:hover {
+  transform: translate(-8px, -8px) scale(1.2);
+  box-shadow: 0 6px 16px rgba(102,126,234,0.5);
+}
+
+.handle:active {
+  cursor: grabbing;
+  transform: translate(-8px, -8px) scale(1.1);
+}
+
+.overlay {
+  position: absolute;
+  border: 2px dashed #4ecdc4;
+  color: #4ecdc4;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 8px;
+  pointer-events: none;
+  background: rgba(78,205,196,0.1);
+  backdrop-filter: blur(4px);
+  border-radius: 6px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+#refGuide {
+  bottom: 10px;
+  right: 10px;
+  width: 90px;
+  height: 60px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.result {
+  margin-top: 20px;
+  font-weight: bold;
+  background: rgba(255,255,255,0.95);
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+.result p {
+  color: #333;
+  font-size: 16px;
+  margin: 8px 0;
+}
+
+.result em {
+  color: #667eea;
+  font-size: 14px;
+}
+
+button {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  color: white;
+  padding: 12px 30px;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  margin: 20px 0;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255,107,107,0.4);
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255,107,107,0.6);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+/* Add to your existing styles.css */
+
+.controls {
+  margin: 20px 0;
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.reference-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reference-select label {
+  color: white;
+  font-weight: bold;
+}
+
+#canvas-container {
+  position: relative;
+  display: inline-block;
+  margin: 20px 0;
+  background: white;
+  padding: 15px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+#outputCanvas {
+  display: none;
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+/* Enhanced calibration line */
+.calib-line {
+  position: absolute;
+  height: 4px;
+  background: linear-gradient(90deg, #ff0000, #ff4444);
+  pointer-events: none;
+  transform-origin: 0 0;
+  box-shadow: 0 0 10px rgba(255, 0, 0, 0.8);
+  animation: pulse-line 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-line {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; box-shadow: 0 0 15px rgba(255, 0, 0, 1); }
+}
+
+/* Enhanced calibration handles */
+.calib-handle {
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+  border: 4px solid white;
+  border-radius: 50%;
+  position: absolute;
+  cursor: grab;
+  transform: translate(-10px, -10px);
+  box-shadow: 0 4px 15px rgba(255, 0, 0, 0.5);
+  transition: all 0.2s ease;
+  z-index: 100;
+}
+
+.calib-handle:hover {
+  transform: translate(-10px, -10px) scale(1.3);
+  box-shadow: 0 6px 20px rgba(255, 0, 0, 0.8);
+}
+
+.calib-handle.dragging {
+  cursor: grabbing;
+  transform: translate(-10px, -10px) scale(1.2);
+  box-shadow: 0 8px 25px rgba(255, 0, 0, 1);
+}
+
+.calib-label {
+  position: absolute;
+  top: -35px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(255, 0, 0, 0.9);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  pointer-events: none;
+  z-index: 101;
+}
+
+.calib-label.calibrated {
+  background: rgba(0, 200, 0, 0.9);
+}
+
+/* Status messages */
+.status-message {
+  padding: 15px;
+  border-radius: 10px;
+  margin: 15px 0;
+  font-weight: bold;
+  text-align: center;
+}
+
+.status-message.success {
+  background: rgba(0, 255, 0, 0.15);
+  border: 2px solid #00ff00;
+  color: white;
+}
+
+.status-message.warning {
+  background: rgba(255, 165, 0, 0.15);
+  border: 2px solid #ffa500;
+  color: white;
+}
+
+.status-message.loading {
+  background: rgba(100, 150, 255, 0.15);
+  border: 2px solid #6496ff;
+  color: white;
+}
+
+/* Enhanced results */
+.result-header {
+  border-bottom: 2px solid #667eea;
+  padding-bottom: 15px;
+  margin-bottom: 20px;
+}
+
+.result-header h3 {
+  color: #667eea;
+  margin: 0 0 10px 0;
+}
+
+.hand-label {
+  color: #333;
+  font-size: 18px;
+  margin: 0;
+}
+
+.measurements {
+  margin: 20px 0;
+}
+
+.measurement-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 8px;
+  background: rgba(102,126,234,0.05);
+  border-left: 4px solid;
+}
+
+.measurement-item.index {
+  border-left-color: #FFD700;
+}
+
+.measurement-item.ring {
+  border-left-color: #00FFFF;
+}
+
+.finger-icon {
+  font-size: 24px;
+}
+
+.finger-name {
+  flex: 1;
+  color: #333;
+  font-weight: bold;
+}
+
+.finger-value {
+  color: #667eea;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.ratio-display {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  margin: 20px 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  color: white;
+}
+
+.ratio-label {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.ratio-value {
+  font-size: 32px;
+  font-weight: bold;
+  text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+}
+
+.interpretation {
+  padding: 15px;
+  border-radius: 8px;
+  margin: 20px 0;
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.male-indicator {
+  color: #4169E1;
+}
+
+.female-indicator {
+  color: #FF1493;
+}
+
+.neutral-indicator {
+  color: #9370DB;
+}
+
+.calibration-info {
+  padding: 10px;
+  background: rgba(102,126,234,0.1);
+  border-radius: 6px;
+  text-align: center;
+  margin: 15px 0;
+}
+
+.reference-info {
+  padding: 15px;
+  background: rgba(78,205,196,0.1);
+  border: 1px dashed #4ecdc4;
+  border-radius: 8px;
+  margin-top: 15px;
+  line-height: 1.8;
+}
+
+.reset-btn {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  font-size: 18px;
+}
+
+/* Add these to your existing styles.css */
+
+/* Quality Assessment Panel */
+.quality-panel {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 20px;
+  border-radius: 12px;
+  margin: 20px 0;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+.quality-panel h4 {
+  color: #667eea;
+  margin: 0 0 15px 0;
+  font-size: 1.2em;
+}
+
+.quality-item {
+  padding: 10px 15px;
+  margin: 8px 0;
+  border-radius: 8px;
+  border-left: 4px solid;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.quality-item.good {
+  background: rgba(0, 255, 0, 0.1);
+  border-left-color: #00cc00;
+  color: #006600;
+}
+
+.quality-item.warning {
+  background: rgba(255, 165, 0, 0.1);
+  border-left-color: #ff9900;
+  color: #cc6600;
+}
+
+.quality-item.bad {
+  background: rgba(255, 0, 0, 0.1);
+  border-left-color: #ff0000;
+  color: #cc0000;
+}
+
+/* Overall Recommendations */
+.recommendation {
+  margin-top: 15px;
+  padding: 15px;
+  border-radius: 8px;
+  font-weight: bold;
+  text-align: center;
+  font-size: 16px;
+}
+
+.recommendation.excellent {
+  background: linear-gradient(135deg, #00ff00 0%, #00cc00 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(0, 255, 0, 0.3);
+}
+
+.recommendation.good {
+  background: linear-gradient(135deg, #ffd700 0%, #ffaa00 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+}
+
+.recommendation.poor {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);
+  color: white;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+}
+
+.accuracy-info {
+  background: rgba(102, 126, 234, 0.1);
+  padding: 20px;
+  border-radius: 12px;
+  margin: 20px 0;
+  border: 2px solid rgba(102, 126, 234, 0.3);
+}
+
+.accuracy-info h4 {
+  color: #667eea;
+  margin: 0 0 15px 0;
+  font-size: 1.1em;
+}
+
+.accuracy-bar {
+  width: 100%;
+  height: 30px;
+  background: rgba(200, 200, 200, 0.3);
+  border-radius: 15px;
+  overflow: hidden;
+  margin: 15px 0;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.1);
+}
+
+.accuracy-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff6b6b 0%, #ffd700 50%, #00ff00 100%);
+  border-radius: 15px;
+  transition: width 0.5s ease;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 10px;
+  color: white;
+  font-weight: bold;
+  box-shadow: 0 2px 10px rgba(102, 126, 234, 0.5);
+}
+
+.accuracy-info p {
+  color: #333;
+  margin: 10px 0 0 0;
+  font-size: 14px;
+  text-align: center;
+}
+
+/* Enhanced touch support */
+@media (hover: none) and (pointer: coarse) {
+  .calib-handle {
+    width: 30px;
+    height: 30px;
+    transform: translate(-15px, -15px);
+  }
+
+  .calib-handle:hover {
+    transform: translate(-15px, -15px) scale(1.1);
+  }
+
+  .calib-handle.dragging {
+    transform: translate(-15px, -15px) scale(1.2);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  body {
+    padding: 10px;
+  }
+
+  h2 {
+    font-size: 1.5em;
+  }
+
+  .controls {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .quality-panel {
+    padding: 15px;
+  }
+
+  .quality-item {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .measurement-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+
+  .finger-value {
+    font-size: 18px;
+  }
+
+  .ratio-display {
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+
+  .ratio-value {
+    font-size: 28px;
+  }
+
+  .calib-label {
+    font-size: 11px;
+    padding: 6px 12px;
+  }
+}
+
+/* Animation for quality indicators */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.quality-item {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Pulse animation for poor quality items */
+.quality-item.bad {
+  animation: fadeIn 0.3s ease-out, pulse-warning 2s ease-in-out infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(255, 0, 0, 0);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(255, 0, 0, 0.5);
+  }
+}
+
+/* Loading spinner for status */
+.status-message.loading::before {
+  content: '';
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  border: 3px solid rgba(100, 150, 255, 0.3);
+  border-top-color: #6496ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Improved calibration line visibility */
+.calib-line::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: linear-gradient(90deg, 
+    rgba(255, 0, 0, 0) 0%, 
+    rgba(255, 0, 0, 0.3) 50%, 
+    rgba(255, 0, 0, 0) 100%
+  );
+  filter: blur(4px);
+}
+
+/* Enhanced measurement display */
+.measurement-item {
+  position: relative;
+  overflow: hidden;
+}
+
+.measurement-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: inherit;
+  animation: shimmer 2s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Print styles */
+@media print {
+  body {
+    background: white;
+  }
+
+  .controls,
+  .reset-btn,
+  #canvas-container .calib-line,
+  #canvas-container .calib-handle,
+  #canvas-container .calib-label {
+    display: none;
+  }
+
+  .result,
+  .quality-panel {
+    page-break-inside: avoid;
+  }
+}
+
+/* Add to your existing styles.css */
+
+/* Highlight text in instructions */
+.highlight {
+  background: linear-gradient(120deg, #ffd700 0%, #ffed4e 100%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: bold;
+  color: #333;
+}
+
+/* Calibration guide box */
+.calibration-guide {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(255, 200, 0, 0.15);
+  border: 2px solid rgba(255, 200, 0, 0.5);
+  border-radius: 8px;
+  line-height: 1.6;
+}
+
+.calibration-guide small {
+  color: white;
+  font-size: 13px;
+}
+
+.calibration-guide strong {
+  color: #ffd700;
+}
+
+/* Enhanced instructions styling */
+#instructions ol li {
+  line-height: 1.8;
+}
+
+#instructions ol li .highlight {
+  animation: highlight-pulse 2s ease-in-out infinite;
+}
+
+@keyframes highlight-pulse {
+  0%, 100% {
+    background: linear-gradient(120deg, #ffd700 0%, #ffed4e 100%);
+  }
+  50% {
+    background: linear-gradient(120deg, #ffed4e 0%, #ffd700 100%);
+  }
+}
+
+/* Reference select improvements */
+.reference-select {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-width: 500px;
+}
+
+.reference-select select {
+  font-size: 15px;
+  padding: 12px 15px;
+}
